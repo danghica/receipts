@@ -249,7 +249,7 @@
             showAcceptMessage('Receipt added. 发票号码: ' + (result.data.invoiceNumber || ''), false);
             resultHeading.textContent = 'Receipt added';
           } else if (result.status === 409) {
-            showAcceptMessage('发票号码 already exists in spreadsheet.', true);
+            showAcceptMessage(result.data.message || '发票号码 already exists in spreadsheet.', true);
           } else {
             showAcceptMessage(result.data.message || 'Failed to add receipt.', true);
           }
@@ -266,7 +266,7 @@
               showAcceptMessage('Receipt added. 发票号码: ' + (result.data.invoiceNumber || ''), false);
               resultHeading.textContent = 'Receipt added';
             } else if (result.status === 409) {
-              showAcceptMessage('发票号码 already exists in spreadsheet.', true);
+              showAcceptMessage(result.data.message || '发票号码 already exists in spreadsheet.', true);
             } else {
               showAcceptMessage(result.data.message || 'Failed to add receipt.', true);
             }
