@@ -2,6 +2,10 @@
 
 A local Node.js web app that extracts data from Chinese receipt images (发票), lets you review and edit the values, then saves them to an Excel spreadsheet and stores the cropped receipt image in an `ORIGINALS` folder.
 
+## Disclaimer
+
+This software is provided as-is, without warranty of any kind. There is no guarantee of correctness of OCR results or stored data. Use at your own risk; verify any data that matters for accounting, tax, or legal purposes. See the [LICENSE](LICENSE) file for full terms.
+
 ## Features
 
 - **Upload** a receipt image → crop/normalize margins → OCR only in configured regions (no full-image OCR).
