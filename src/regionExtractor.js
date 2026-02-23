@@ -111,6 +111,38 @@ function normalizeSpaces(str) {
   return (str || '').trim().replace(/\s+/g, '');
 }
 
+/** Saturation threshold: pixels with (max(R,G,B)-min(R,G,B)) > this are considered colored and set to white. */
+const SATURATION_THRESHOLD = 28;
+
+/**
+ * Set all colored pixels to white; leave black and grey pixels unchanged.
+ * @param {Buffer} rawRGBA Buffer of raw RGBA pixels (4 bytes per pixel)
+ * @param {number} width
+ * @param {number} height
+ * @returns {Buffer} Raw RGB buffer (3 bytes per pixel) for the result image
+ */
+function coloredPixelsToWhite(rawRGBA, width, height) {
+  const out = Buffer.alloc(width * height * 3);
+  for (let i = 0; i < width * height; i++) {
+    const R = rawRGBA[i * 4];
+    const G = rawRGBA[i * 4 + 1];
+    const B = rawRGBA[i * 4 + 2];
+    const max = Math.max(R, G, B);
+    const min = Math.min(R, G, B);
+    const saturation = max - min;
+    if (saturation > SATURATION_THRESHOLD) {
+      out[i * 3] = 255;
+      out[i * 3 + 1] = 255;
+      out[i * 3 + 2] = 255;
+    } else {
+      out[i * 3] = R;
+      out[i * 3 + 1] = G;
+      out[i * 3 + 2] = B;
+    }
+  }
+  return out;
+}
+
 /**
  * Extract receipt fields by cropping each region and running OCR on each crop.
  * @param {Buffer} imageBuffer Cropped/normalized receipt image
@@ -153,11 +185,20 @@ async function extractFromRegions(imageBuffer, imageWidth, imageHeight, regionCo
 
     let raw = '';
     try {
-      const cropped = await sharp(imageBuffer)
+      const croppedMeta = await sharp(imageBuffer)
         .extract({ left, top, width, height })
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      const { data: rawRGBA, info } = croppedMeta;
+      const roiW = info.width;
+      const roiH = info.height;
+      const rgbNoColor = coloredPixelsToWhite(rawRGBA, roiW, roiH);
+      const forOcr = await sharp(rgbNoColor, { raw: { width: roiW, height: roiH, channels: 3 } })
+        .png()
         .toBuffer();
-      result.crops[key] = cropped.toString('base64');
-      const ocrResult = await recognize(cropped);
+      result.crops[key] = forOcr.toString('base64');
+      const ocrResult = await recognize(forOcr);
       raw = normalizeSpaces(ocrResult.text || '');
     } catch (e) {
       raw = '';
