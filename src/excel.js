@@ -15,6 +15,7 @@ const HEADERS = [
   '税额',
   '名字',
   'ORIGINAL',
+  '全部',
 ];
 
 let writeLock = null;
@@ -53,6 +54,10 @@ async function getOrCreateWorkbook() {
       if (cell9.value == null || String(cell9.value).trim() === '') {
         cell9.value = 'ORIGINAL';
       }
+      const cell10 = sheet.getCell(1, 10);
+      if (cell10.value == null || String(cell10.value).trim() === '') {
+        cell10.value = '全部';
+      }
     }
     return workbook;
   }
@@ -76,9 +81,30 @@ async function getExistingInvoiceNumbers() {
   return numbers;
 }
 
+/** Returns the 名字 (custom name) for the row with the given 发票号码, or null if not found. */
+async function getCustomNameByInvoiceNumber(invoiceNumber) {
+  if (invoiceNumber == null || String(invoiceNumber).trim() === '') return null;
+  const workbook = await getOrCreateWorkbook();
+  const sheet = workbook.worksheets[0];
+  const key = String(invoiceNumber).trim();
+  for (let r = 2; r <= sheet.rowCount; r++) {
+    const cell = sheet.getCell(r, 1);
+    const val = cell.value;
+    if (val != null && String(val).trim() === key) {
+      const nameCell = sheet.getCell(r, 8);
+      const nameVal = nameCell.value;
+      return nameVal != null ? String(nameVal).trim() : '';
+    }
+  }
+  return null;
+}
+
 async function appendReceipt(data) {
   const workbook = await getOrCreateWorkbook();
   const sheet = workbook.worksheets[0];
+  const amount = data.amount != null ? Number(data.amount) : 0;
+  const tax = data.tax != null ? Number(data.tax) : 0;
+  const total = amount + tax;
   const row = [
     data.invoiceNumber,
     data.invoiceDate,
@@ -89,12 +115,14 @@ async function appendReceipt(data) {
     data.tax,
     data.customName != null ? data.customName : '',
     data.originalFileName != null ? data.originalFileName : '',
+    total,
   ];
   sheet.addRow(row);
   await workbook.xlsx.writeFile(EXCEL_PATH);
 }
 
 const getExistingInvoiceNumbersLocked = withLock(getExistingInvoiceNumbers);
+const getCustomNameByInvoiceNumberLocked = withLock(getCustomNameByInvoiceNumber);
 const appendReceiptLocked = withLock(appendReceipt);
 const resetReceiptsLocked = withLock(resetReceipts);
 
@@ -102,6 +130,7 @@ module.exports = {
   EXCEL_PATH,
   ORIGINALS_DIR,
   getExistingInvoiceNumbers: getExistingInvoiceNumbersLocked,
+  getCustomNameByInvoiceNumber: getCustomNameByInvoiceNumberLocked,
   appendReceipt: appendReceiptLocked,
   resetReceipts: resetReceiptsLocked,
 };

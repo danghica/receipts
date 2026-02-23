@@ -13,7 +13,7 @@ const { cropMargins } = require('./cropMargins');
 const sharp = require('sharp');
 const { validateExtracted, normalizeDate, normalizeAmount } = require('./parser');
 const { loadRegionConfig, getConfigPath, extractFromRegions, getRegionBboxesPixels } = require('./regionExtractor');
-const { getExistingInvoiceNumbers, appendReceipt, resetReceipts, ORIGINALS_DIR } = require('./excel');
+const { getExistingInvoiceNumbers, getCustomNameByInvoiceNumber, appendReceipt, resetReceipts, ORIGINALS_DIR } = require('./excel');
 
 (function logRegionConfig() {
   const configPath = getConfigPath();
@@ -99,9 +99,13 @@ app.post('/api/accept-receipt', upload.single('image'), async (req, res) => {
 
     const existing = await getExistingInvoiceNumbers();
     if (existing.includes(data.invoiceNumber)) {
+      const submittedByName = await getCustomNameByInvoiceNumber(data.invoiceNumber);
+      const namePart = submittedByName != null && submittedByName !== ''
+        ? ` by ${submittedByName}`
+        : ' (no name recorded)';
       return res.status(409).json({
         success: false,
-        message: '发票号码 already exists in spreadsheet.',
+        message: `The receipt with 发票号码 ${data.invoiceNumber} was already submitted${namePart}.`,
       });
     }
 

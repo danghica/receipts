@@ -10,9 +10,9 @@
   const receiptImage = document.getElementById('receipt-image');
   const receiptOverlay = document.getElementById('receipt-overlay');
   const parsedBody = document.getElementById('parsed-entries-body');
-  const resetReceiptsBtn = document.getElementById('reset-receipts-btn');
   const acceptReceiptBtn = document.getElementById('accept-receipt-btn');
   const acceptMessageEl = document.getElementById('accept-message');
+  const uploadSuccessMsg = document.getElementById('upload-success-msg');
 
   function showMessage(text, isError) {
     messageEl.textContent = text;
@@ -189,6 +189,7 @@
     setLoading(true);
     messageEl.textContent = '';
     messageEl.className = '';
+    if (uploadSuccessMsg) uploadSuccessMsg.textContent = '';
     hideResult();
 
     const formData = new FormData();
@@ -202,7 +203,7 @@
       const data = await res.json().catch(() => ({}));
 
       if (res.ok) {
-        showMessage('Receipt scanned. Review and accept.', false);
+        if (uploadSuccessMsg) uploadSuccessMsg.textContent = 'Receipt scanned. Review and accept.';
         if (data.image) showResult(data.image, data.parsed || {}, false, data.bboxes, data.parsedCrops);
         form.reset();
         return;
@@ -277,28 +278,6 @@
             acceptReceiptBtn.disabled = false;
           });
       }
-    });
-  }
-
-  if (resetReceiptsBtn) {
-    resetReceiptsBtn.addEventListener('click', function () {
-      if (!confirm('Clear all receipt data from receipts.xlsx? This cannot be undone.')) return;
-      resetReceiptsBtn.disabled = true;
-      fetch('/api/reset-receipts', { method: 'POST' })
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-          if (data.success) {
-            showMessage(data.message || 'Spreadsheet reset.', false);
-          } else {
-            showMessage(data.message || 'Failed to reset.', true);
-          }
-        })
-        .catch(function () {
-          showMessage('Network or server error. Please try again.', true);
-        })
-        .finally(function () {
-          resetReceiptsBtn.disabled = false;
-        });
     });
   }
 })();
