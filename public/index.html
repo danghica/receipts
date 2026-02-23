@@ -12,6 +12,7 @@
       max-width: 1200px;
       margin: 0 auto;
       padding: 1rem 1.5rem 4rem;
+      background-color: #eef2f6;
     }
     h1 { font-size: 1.5rem; margin-bottom: 1rem; }
     label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
@@ -39,7 +40,7 @@
     }
     button:disabled { opacity: 0.6; cursor: not-allowed; }
     #message {
-      margin-top: 1rem;
+      margin-top: 0.75rem;
       padding: 0.75rem 1rem;
       border-radius: 6px;
       min-height: 2.5rem;
@@ -47,18 +48,18 @@
     #message.success { background: #dcfce7; color: #166534; }
     #message.error { background: #fee2e2; color: #991b1b; }
     #message:empty { display: none; }
-    #result { margin-top: 1.5rem; display: none; }
+    #result { margin-top: 0.75rem; display: none; }
     #result.visible { display: block; }
     .result-layout {
       display: grid;
       grid-template-columns: minmax(280px, 1fr) minmax(320px, 1fr);
-      gap: 1.5rem;
+      gap: 1rem;
       align-items: start;
     }
     @media (max-width: 720px) {
       .result-layout { grid-template-columns: 1fr; }
     }
-    #result h2 { font-size: 1.15rem; margin-bottom: 0.75rem; }
+    #result h2 { display: none; }
     .receipt-column { min-width: 0; }
     .receipt-image-wrapper {
       position: relative;
@@ -104,11 +105,12 @@
     }
     #parsed-entries th, #parsed-entries td {
       text-align: left;
-      padding: 0.5rem 0.75rem;
+      padding: 0.35rem 0.5rem;
       border-bottom: 1px solid #e5e7eb;
       vertical-align: top;
     }
     .data-column { min-width: 0; }
+    #parsed-entries thead { display: none; }
     #parsed-entries th {
       color: #374151;
       font-weight: 500;
@@ -157,7 +159,7 @@
       position: static;
     }
     #result .result-actions {
-      margin-top: 1rem;
+      margin-top: 0.5rem;
       margin-bottom: 0;
       display: flex;
       align-items: center;
