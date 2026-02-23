@@ -1,6 +1,6 @@
 # Receipt region calibration
 
-The file `receipt-regions.json` defines where to read each field on the receipt image. Overlays and extraction use these regions.
+The file `receipt-regions.json` defines where to read each field on the receipt image. Overlays and extraction use these regions. The **名字** (custom name) field is not read from the image; it is a separate text input on the page and has no region in this config.
 
 ## Why overlays can be misaligned
 
