@@ -59,6 +59,8 @@ Then open the URL shown in the terminal (e.g. http://localhost:3000). If the por
 - **Port**: `PORT` (default 3000). If in use, the server tries 3001, 3002, etc.
 - **Excel file**: `RECEIPTS_EXCEL_PATH` (default `./receipts.xlsx` in the project root).
 
+For full documentation (architecture, API, configuration, user guide, development), see the **[docs/](docs/)** directory.
+
 ## Data storage
 
 - **receipts.xlsx**: One row per accepted receipt. Columns: 发票号码, 开票日期, 名称1, 名称2, 项目名称, 金额, 税额, 名字, ORIGINAL. The ORIGINAL column holds the filename of the stored image (e.g. `26337000000187987298.png`).
