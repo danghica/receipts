@@ -1,0 +1,5 @@
+{
+  "watch": ["src", "config", "public", "run.js"],
+  "ext": "js,json,html",
+  "ignore": ["node_modules", "*.xlsx", "tessdata"]
+}

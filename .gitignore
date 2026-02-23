@@ -1,0 +1,6 @@
+node_modules/
+receipts.xlsx
+.env
+*.log
+.tesseract-cache/
+tessdata/*.traineddata*

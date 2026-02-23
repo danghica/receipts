@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Receipt management</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 480px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+    }
+    h1 { font-size: 1.5rem; margin-bottom: 1rem; }
+    label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
+    input[type="file"] { margin-bottom: 1rem; }
+    button {
+      background: #2563eb;
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .form-actions { margin-top: 0.75rem; }
+    #message {
+      margin-top: 1.5rem;
+      padding: 0.75rem 1rem;
+      border-radius: 6px;
+      min-height: 2.5rem;
+    }
+    #message.success { background: #dcfce7; color: #166534; }
+    #message.error { background: #fee2e2; color: #991b1b; }
+    #message:empty { display: none; }
+    #result { margin-top: 2rem; display: none; }
+    #result.visible { display: block; }
+    #result h2 { font-size: 1.15rem; margin-bottom: 0.75rem; }
+    .receipt-image-wrapper {
+      position: relative;
+      display: inline-block;
+      max-width: 100%;
+      margin-bottom: 1rem;
+    }
+    #receipt-image {
+      display: block;
+      max-width: 100%;
+      max-height: 320px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+    }
+    .receipt-overlay {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    .receipt-overlay .region-frame {
+      position: absolute;
+      border: 2px solid #2563eb;
+      background: rgba(37, 99, 235, 0.08);
+      box-sizing: border-box;
+    }
+    .receipt-overlay .region-label {
+      position: absolute;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #2563eb;
+      white-space: nowrap;
+      text-shadow: 0 0 2px #fff, 0 0 4px #fff;
+    }
+    #parsed-entries {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.95rem;
+    }
+    #parsed-entries th, #parsed-entries td {
+      text-align: left;
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid #e5e7eb;
+      vertical-align: top;
+    }
+    #parsed-entries th {
+      color: #374151;
+      font-weight: 500;
+      white-space: nowrap;
+      min-width: 7em;
+      padding-right: 1rem;
+    }
+    #parsed-entries td.parsed-missing { color: #6b7280; font-style: italic; }
+    #parsed-entries .parsed-roi-cell { padding: 0.25rem 0.5rem; vertical-align: middle; }
+    #parsed-entries .parsed-roi-cell img {
+      display: block;
+      max-width: 120px;
+      max-height: 48px;
+      width: auto;
+      height: auto;
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+    }
+    .build-number {
+      position: fixed;
+      bottom: 0.5rem;
+      right: 0.5rem;
+      font-size: 0.7rem;
+      color: #9ca3af;
+      font-weight: normal;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="build-number" id="build-timestamp" aria-hidden="true"></div>
+  <h1>Receipt management</h1>
+  <form id="form">
+    <label for="image">Receipt image (Chinese 发票)</label>
+    <input type="file" id="image" name="image" accept="image/jpeg,image/png,image/webp,image/gif" required>
+    <button type="submit" id="submit">Upload and add to spreadsheet</button>
+  </form>
+  <p class="form-actions">
+    <button type="button" id="reset-receipts-btn">Reset spreadsheet</button>
+  </p>
+  <div id="message" role="status"></div>
+  <section id="result" aria-label="Uploaded receipt result">
+    <h2 id="result-heading">Receipt</h2>
+    <div class="receipt-image-wrapper" id="receipt-image-wrapper">
+      <img id="receipt-image" alt="Uploaded receipt" src="">
+      <div class="receipt-overlay" id="receipt-overlay" aria-hidden="true"></div>
+    </div>
+    <table id="parsed-entries" aria-label="Parsed receipt data">
+      <thead>
+        <tr>
+          <th scope="col">Field</th>
+          <th scope="col">Value</th>
+          <th scope="col">ROI</th>
+        </tr>
+      </thead>
+      <tbody id="parsed-entries-body"></tbody>
+    </table>
+  </section>
+  <script src="app.js"></script>
+  <script>
+    fetch('/api/build').then(function(r){ return r.json(); }).then(function(d){
+      var el = document.getElementById('build-timestamp');
+      if (el && d.timestamp) el.textContent = d.timestamp;
+    }).catch(function(){});
+  </script>
+</body>
+</html>
