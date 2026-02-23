@@ -112,19 +112,68 @@
       font-weight: normal;
       pointer-events: none;
     }
+    .footer-meta {
+      position: fixed;
+      bottom: 0.5rem;
+      right: 0.5rem;
+      font-size: 0.7rem;
+      color: #9ca3af;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      pointer-events: none;
+    }
+    .footer-meta .footer-meta-reset {
+      pointer-events: auto;
+      background: transparent;
+      color: #6b7280;
+      font-size: 0.7rem;
+      padding: 0.2rem 0.4rem;
+      cursor: pointer;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+    }
+    .footer-meta .footer-meta-reset:hover {
+      color: #374151;
+      border-color: #9ca3af;
+    }
+    .footer-meta .build-number {
+      position: static;
+    }
+    #result .result-actions {
+      margin-top: 1rem;
+      margin-bottom: 0;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    #result .result-actions-message {
+      padding: 0.35rem 0.6rem;
+      border-radius: 4px;
+      font-size: 0.9rem;
+    }
+    #result .result-actions-message.success { background: #dcfce7; color: #166534; }
+    #result .result-actions-message.error { background: #fee2e2; color: #991b1b; }
+    #result .result-actions-message:empty { display: none; }
+    #parsed-entries input[type="text"] {
+      width: 100%;
+      max-width: 100%;
+      padding: 0.35rem 0.5rem;
+      font-size: inherit;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
   </style>
 </head>
 <body>
-  <div class="build-number" id="build-timestamp" aria-hidden="true"></div>
   <h1>Receipt management</h1>
   <form id="form">
     <label for="image">Receipt image (Chinese 发票)</label>
     <input type="file" id="image" name="image" accept="image/jpeg,image/png,image/webp,image/gif" required>
-    <button type="submit" id="submit">Upload and add to spreadsheet</button>
+    <button type="submit" id="submit">Upload</button>
   </form>
-  <p class="form-actions">
-    <button type="button" id="reset-receipts-btn">Reset spreadsheet</button>
-  </p>
   <div id="message" role="status"></div>
   <section id="result" aria-label="Uploaded receipt result">
     <h2 id="result-heading">Receipt</h2>
@@ -142,7 +191,15 @@
       </thead>
       <tbody id="parsed-entries-body"></tbody>
     </table>
+    <p class="result-actions">
+      <button type="button" id="accept-receipt-btn">Accept</button>
+      <span id="accept-message" class="result-actions-message" role="status"></span>
+    </p>
   </section>
+  <footer class="footer-meta" aria-hidden="true">
+    <button type="button" id="reset-receipts-btn" class="footer-meta-reset">Reset spreadsheet</button>
+    <span class="build-number" id="build-timestamp"></span>
+  </footer>
   <script src="app.js"></script>
   <script>
     fetch('/api/build').then(function(r){ return r.json(); }).then(function(d){

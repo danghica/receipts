@@ -11,9 +11,9 @@ const imageSize = require('image-size');
 const multer = require('multer');
 const { cropMargins } = require('./cropMargins');
 const sharp = require('sharp');
-const { validateExtracted } = require('./parser');
+const { validateExtracted, normalizeDate, normalizeAmount } = require('./parser');
 const { loadRegionConfig, getConfigPath, extractFromRegions, getRegionBboxesPixels } = require('./regionExtractor');
-const { getExistingInvoiceNumbers, appendReceipt, resetReceipts } = require('./excel');
+const { getExistingInvoiceNumbers, appendReceipt, resetReceipts, ORIGINALS_DIR } = require('./excel');
 
 (function logRegionConfig() {
   const configPath = getConfigPath();
@@ -60,6 +60,76 @@ app.post('/api/reset-receipts', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to reset spreadsheet.',
+    });
+  }
+});
+
+app.post('/api/accept-receipt', upload.single('image'), async (req, res) => {
+  try {
+    const body = req.body || {};
+    const invoiceNumber = body.invoiceNumber != null ? String(body.invoiceNumber).trim() : '';
+    const invoiceDateRaw = body.invoiceDate != null ? String(body.invoiceDate).trim() : '';
+    const invoiceDate = invoiceDateRaw ? normalizeDate(invoiceDateRaw) : null;
+    const name1 = body.name1 != null ? String(body.name1).trim() : '';
+    const name2 = body.name2 != null ? String(body.name2).trim() : '';
+    const projectName = body.projectName != null ? String(body.projectName).trim() : '';
+    const amount = normalizeAmount(body.amount);
+    const tax = normalizeAmount(body.tax);
+    const customNameRaw = body.customName != null ? String(body.customName).trim() : '';
+    const customName = customNameRaw.replace(/\s+/g, '');
+
+    const data = {
+      invoiceNumber,
+      invoiceDate,
+      name1,
+      name2,
+      projectName,
+      amount: amount != null ? amount : null,
+      tax: tax != null ? tax : null,
+      customName,
+      originalFileName: '',
+    };
+
+    try {
+      validateExtracted(data);
+    } catch (e) {
+      const message = e.code === 'MALFORMED' ? e.message : 'Missing or invalid: ' + (e.message || 'parse error');
+      return res.status(400).json({ success: false, message });
+    }
+
+    const existing = await getExistingInvoiceNumbers();
+    if (existing.includes(data.invoiceNumber)) {
+      return res.status(409).json({
+        success: false,
+        message: '发票号码 already exists in spreadsheet.',
+      });
+    }
+
+    if (req.file && req.file.buffer && data.invoiceNumber) {
+      try {
+        fs.mkdirSync(ORIGINALS_DIR, { recursive: true });
+        const ext = (req.file.mimetype === 'image/jpeg' || req.file.mimetype === 'image/jpg') ? '.jpg' : req.file.mimetype === 'image/png' ? '.png' : req.file.mimetype === 'image/webp' ? '.webp' : '.png';
+        const safeName = String(data.invoiceNumber).replace(/[^a-zA-Z0-9._-]/g, '') || 'receipt';
+        const filename = safeName + ext;
+        const filepath = path.join(ORIGINALS_DIR, filename);
+        fs.writeFileSync(filepath, req.file.buffer);
+        data.originalFileName = filename;
+      } catch (e) {
+        console.error('Failed to save original image:', e);
+      }
+    }
+
+    await appendReceipt(data);
+    return res.status(200).json({
+      success: true,
+      message: 'Receipt added.',
+      invoiceNumber: data.invoiceNumber,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      success: false,
+      message: 'An error occurred while accepting the receipt.',
     });
   }
 });
@@ -178,59 +248,8 @@ app.post('/receipt', upload.single('image'), async (req, res) => {
         parsedCrops[k] = `data:${req.file.mimetype};base64,${data.crops[k]}`;
       }
     }
-    try {
-      validateExtracted(data);
-    } catch (e) {
-      const message = e.code === 'MALFORMED' ? e.message : 'Missing or invalid: ' + (e.message || 'parse error');
-      return res.status(400).json(withImage({
-        success: false,
-        error: 'malformed',
-        message,
-        parsed: {
-          发票号码: data.invoiceNumber,
-          开票日期: data.invoiceDate,
-          名称1: data.name1,
-          名称2: data.name2,
-          项目名称: data.projectName,
-          金额: data.amount,
-          税额: data.tax,
-        },
-        parsedCrops,
-        bboxes: overlayBboxes,
-      }));
-    }
-
-    const existing = await getExistingInvoiceNumbers();
-    if (existing.includes(data.invoiceNumber)) {
-      return res.status(409).json(withImage({
-        success: false,
-        error: 'duplicate',
-        message: '发票号码 already exists in spreadsheet.',
-        parsed: {
-          发票号码: data.invoiceNumber,
-          开票日期: data.invoiceDate,
-          名称1: data.name1,
-          名称2: data.name2,
-          项目名称: data.projectName,
-          金额: data.amount,
-          税额: data.tax,
-        },
-        parsedCrops,
-        bboxes: overlayBboxes,
-      }));
-    }
-
-    // #region agent log
-    dlog('index.js:before appendReceipt', 'calling appendReceipt', { invoiceNumber: data.invoiceNumber }, 'H5');
-    // #endregion
-    await appendReceipt(data);
-    // #region agent log
-    dlog('index.js:before 200 response', 'sending 200', {}, 'H5');
-    // #endregion
-    return res.status(200).json(withImage({
-      success: true,
-      message: 'Receipt added.',
-      invoiceNumber: data.invoiceNumber,
+    return res.status(200).json({
+      image: imageDataUrl,
       parsed: {
         发票号码: data.invoiceNumber,
         开票日期: data.invoiceDate,
@@ -242,7 +261,7 @@ app.post('/receipt', upload.single('image'), async (req, res) => {
       },
       parsedCrops,
       bboxes: overlayBboxes,
-    }));
+    });
   } catch (err) {
     if (err.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({

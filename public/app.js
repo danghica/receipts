@@ -1,4 +1,6 @@
 (function () {
+  const FIELD_ORDER = ['发票号码', '开票日期', '名称1', '名称2', '项目名称', '金额', '税额', '名字'];
+
   const form = document.getElementById('form');
   const fileInput = document.getElementById('image');
   const submitBtn = document.getElementById('submit');
@@ -9,6 +11,8 @@
   const receiptOverlay = document.getElementById('receipt-overlay');
   const parsedBody = document.getElementById('parsed-entries-body');
   const resetReceiptsBtn = document.getElementById('reset-receipts-btn');
+  const acceptReceiptBtn = document.getElementById('accept-receipt-btn');
+  const acceptMessageEl = document.getElementById('accept-message');
 
   function showMessage(text, isError) {
     messageEl.textContent = text;
@@ -17,12 +21,26 @@
     messageEl.setAttribute('aria-live', 'polite');
   }
 
+  function showAcceptMessage(text, isError) {
+    if (!acceptMessageEl) return;
+    acceptMessageEl.textContent = text;
+    acceptMessageEl.className = 'result-actions-message ' + (isError ? 'error' : 'success');
+    acceptMessageEl.setAttribute('aria-live', 'polite');
+  }
+
+  function clearAcceptMessage() {
+    if (acceptMessageEl) {
+      acceptMessageEl.textContent = '';
+      acceptMessageEl.className = 'result-actions-message';
+    }
+  }
+
   function setLoading(loading) {
     submitBtn.disabled = loading;
   }
 
-  function formatParsedValue(val) {
-    if (val === null || val === undefined || val === '') return '—';
+  function inputValueForParsed(val) {
+    if (val === null || val === undefined || val === '') return '';
     return String(val);
   }
 
@@ -92,16 +110,16 @@
   }
 
   function showResult(imageDataUrl, parsed, added, bboxes, parsedCrops) {
+    clearAcceptMessage();
     receiptOverlay.innerHTML = '';
     receiptImage.onload = null;
     receiptImage.src = imageDataUrl || '';
-    resultHeading.textContent = added ? 'Receipt added' : 'Receipt could not be added';
+    resultHeading.textContent = added ? 'Receipt added' : 'Receipt';
     parsedBody.innerHTML = '';
     if (parsed && typeof parsed === 'object') {
-      var keys = Object.keys(parsed).filter(function (k) { return k !== 'bboxes'; });
-      keys.forEach(function (label) {
+      FIELD_ORDER.forEach(function (label) {
         var raw = parsed[label];
-        var display = formatParsedValue(raw);
+        var displayValue = inputValueForParsed(raw);
         var cellClass = (raw === null || raw === undefined || raw === '') ? 'parsed-missing' : '';
         var tr = document.createElement('tr');
         var th = document.createElement('th');
@@ -110,7 +128,11 @@
         tr.appendChild(th);
         var tdVal = document.createElement('td');
         tdVal.className = cellClass;
-        tdVal.textContent = display;
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.setAttribute('data-field', label);
+        input.value = displayValue;
+        tdVal.appendChild(input);
         tr.appendChild(tdVal);
         var tdRoi = document.createElement('td');
         tdRoi.className = 'parsed-roi-cell';
@@ -179,36 +201,84 @@
       });
       const data = await res.json().catch(() => ({}));
 
-      if (data.success) {
-        const msg = data.invoiceNumber
-          ? "Receipt added. 发票号码: " + data.invoiceNumber
-          : (data.message || 'Receipt added.');
-        showMessage(msg, false);
-        if (data.image) showResult(data.image, data.parsed || {}, true, data.bboxes, data.parsedCrops);
+      if (res.ok) {
+        showMessage('Receipt scanned. Review and accept.', false);
+        if (data.image) showResult(data.image, data.parsed || {}, false, data.bboxes, data.parsedCrops);
         form.reset();
         return;
       }
 
-      if (data.error === 'duplicate') {
-        showMessage('发票号码 already exists in spreadsheet. This receipt was not added.', true);
-        if (data.image) showResult(data.image, data.parsed || {}, false, data.bboxes, data.parsedCrops);
-        return;
-      }
-
-      if (data.error === 'malformed') {
-        showMessage('Invalid or incomplete data: ' + (data.message || 'check the receipt image.'), true);
-        if (data.image) showResult(data.image, data.parsed || {}, false, data.bboxes, data.parsedCrops);
-        return;
-      }
-
       showMessage(data.message || 'Something went wrong.', true);
-      if (data.image) showResult(data.image, data.parsed || {}, false, data.bboxes, data.parsedCrops);
     } catch (err) {
       showMessage('Network or server error. Please try again.', true);
     } finally {
       setLoading(false);
     }
   });
+
+  if (acceptReceiptBtn) {
+    acceptReceiptBtn.addEventListener('click', function () {
+      var payload = {};
+      var fieldToKey = {
+        '发票号码': 'invoiceNumber',
+        '开票日期': 'invoiceDate',
+        '名称1': 'name1',
+        '名称2': 'name2',
+        '项目名称': 'projectName',
+        '金额': 'amount',
+        '税额': 'tax',
+        '名字': 'customName'
+      };
+      FIELD_ORDER.forEach(function (label) {
+        var input = resultSection.querySelector('input[data-field="' + label + '"]');
+        var key = fieldToKey[label];
+        if (key && input) payload[key] = input.value != null ? String(input.value).trim() : '';
+      });
+      acceptReceiptBtn.disabled = true;
+      clearAcceptMessage();
+      var formData = new FormData();
+      Object.keys(payload).forEach(function (k) { formData.append(k, payload[k] || ''); });
+      var imgSrc = receiptImage && receiptImage.src;
+      if (imgSrc && imgSrc.indexOf('data:') === 0) {
+        fetch(imgSrc).then(function (r) { return r.blob(); }).then(function (blob) {
+          formData.append('image', blob, (payload.invoiceNumber || 'receipt') + '.png');
+          return fetch('/api/accept-receipt', { method: 'POST', body: formData });
+        }).then(function (r) { return r.json().then(function (data) { return { ok: r.ok, status: r.status, data: data }; }); }).then(function (result) {
+          if (result.ok && result.data.success) {
+            showAcceptMessage('Receipt added. 发票号码: ' + (result.data.invoiceNumber || ''), false);
+            resultHeading.textContent = 'Receipt added';
+          } else if (result.status === 409) {
+            showAcceptMessage('发票号码 already exists in spreadsheet.', true);
+          } else {
+            showAcceptMessage(result.data.message || 'Failed to add receipt.', true);
+          }
+        }).catch(function () {
+          showAcceptMessage('Network or server error. Please try again.', true);
+        }).finally(function () {
+          acceptReceiptBtn.disabled = false;
+        });
+      } else {
+        fetch('/api/accept-receipt', { method: 'POST', body: formData })
+          .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, status: r.status, data: data }; }); })
+          .then(function (result) {
+            if (result.ok && result.data.success) {
+              showAcceptMessage('Receipt added. 发票号码: ' + (result.data.invoiceNumber || ''), false);
+              resultHeading.textContent = 'Receipt added';
+            } else if (result.status === 409) {
+              showAcceptMessage('发票号码 already exists in spreadsheet.', true);
+            } else {
+              showAcceptMessage(result.data.message || 'Failed to add receipt.', true);
+            }
+          })
+          .catch(function () {
+            showAcceptMessage('Network or server error. Please try again.', true);
+          })
+          .finally(function () {
+            acceptReceiptBtn.disabled = false;
+          });
+      }
+    });
+  }
 
   if (resetReceiptsBtn) {
     resetReceiptsBtn.addEventListener('click', function () {
