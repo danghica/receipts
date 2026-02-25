@@ -20,6 +20,7 @@
   let batchQueue = [];
   let addedReceipts = [];
   let batchMode = false;
+  let batchTotal = 0;
 
   function showMessage(text, isError) {
     messageEl.textContent = text;
@@ -231,7 +232,9 @@
       if (batchSummarySection) batchSummarySection.classList.add('visible');
       renderBatchSummary();
       batchMode = false;
+      batchTotal = 0;
       showSkipButton(false);
+      if (uploadSuccessMsg) uploadSuccessMsg.textContent = '';
       if (acceptReceiptBtn) acceptReceiptBtn.disabled = false;
       return;
     }
@@ -247,6 +250,7 @@
         if (result.ok && result.data && result.data.image) {
           clearAcceptMessage();
           showResult(result.data.image, result.data.parsed || {}, false, result.data.bboxes, result.data.parsedCrops);
+          updateBatchProgress();
           showSkipButton(true);
         } else {
           showMessage(result.data && result.data.message ? result.data.message : 'Something went wrong.', true);
@@ -255,7 +259,9 @@
           if (batchSummarySection) batchSummarySection.classList.add('visible');
           renderBatchSummary();
           batchMode = false;
+          batchTotal = 0;
           showSkipButton(false);
+          if (uploadSuccessMsg) uploadSuccessMsg.textContent = '';
         }
       })
       .catch(function () {
@@ -265,7 +271,9 @@
         if (batchSummarySection) batchSummarySection.classList.add('visible');
         renderBatchSummary();
         batchMode = false;
+        batchTotal = 0;
         showSkipButton(false);
+        if (uploadSuccessMsg) uploadSuccessMsg.textContent = '';
       })
       .finally(function () {
         setLoading(false);
@@ -288,6 +296,12 @@
     if (skipReceiptBtn) skipReceiptBtn.style.display = show ? '' : 'none';
   }
 
+  function updateBatchProgress() {
+    if (!uploadSuccessMsg || !batchMode || batchTotal <= 0) return;
+    var current = batchTotal - batchQueue.length;
+    uploadSuccessMsg.textContent = 'Receipt ' + current + ' of ' + batchTotal + '. Review and accept or skip.';
+  }
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const files = fileInput.files && Array.from(fileInput.files).filter(function (f) {
@@ -307,6 +321,8 @@
     hideResult();
 
     if (files.length === 1) {
+      batchMode = false;
+      batchTotal = 0;
       const formData = new FormData();
       formData.append('image', files[0]);
       try {
@@ -330,31 +346,36 @@
     batchMode = true;
     addedReceipts = [];
     batchQueue = files.slice(1);
+    batchTotal = files.length;
     const formData = new FormData();
     formData.append('image', files[0]);
     try {
       const res = await fetch('/receipt', { method: 'POST', body: formData });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        if (uploadSuccessMsg) uploadSuccessMsg.textContent = 'Receipt 1 of ' + files.length + '. Review and accept or skip.';
+        updateBatchProgress();
         if (data.image) showResult(data.image, data.parsed || {}, false, data.bboxes, data.parsedCrops);
         showSkipButton(true);
       } else {
         showMessage(data.message || 'Something went wrong.', true);
         batchMode = false;
+        batchTotal = 0;
       }
     } catch (err) {
       showMessage('Network or server error. Please try again.', true);
       batchMode = false;
+      batchTotal = 0;
     } finally {
       setLoading(false);
     }
   });
 
   if (acceptReceiptBtn) {
+    var acceptInFlight = false;
     acceptReceiptBtn.addEventListener('click', function () {
       var payload = getCurrentFormPayload();
       acceptReceiptBtn.disabled = true;
+      acceptInFlight = true;
       clearAcceptMessage();
       var formData = new FormData();
       Object.keys(payload).forEach(function (k) { formData.append(k, payload[k] || ''); });
@@ -384,16 +405,30 @@
             }
           } else if (result.status === 409) {
             showAcceptMessage(result.data && result.data.message ? result.data.message : '发票号码 already exists in spreadsheet.', true);
+            acceptReceiptBtn.disabled = false;
           } else {
             showAcceptMessage(result.data && result.data.message ? result.data.message : 'Failed to add receipt.', true);
+            acceptReceiptBtn.disabled = false;
           }
         })
         .catch(function () {
           showAcceptMessage('Network or server error. Please try again.', true);
+          acceptReceiptBtn.disabled = false;
         })
         .finally(function () {
+          acceptInFlight = false;
           if (!batchMode) acceptReceiptBtn.disabled = false;
         });
+    });
+    resultSection.addEventListener('input', function () {
+      if (acceptReceiptBtn.disabled && !acceptInFlight && resultSection.classList.contains('visible')) {
+        acceptReceiptBtn.disabled = false;
+      }
+    });
+    resultSection.addEventListener('change', function () {
+      if (acceptReceiptBtn.disabled && !acceptInFlight && resultSection.classList.contains('visible')) {
+        acceptReceiptBtn.disabled = false;
+      }
     });
   }
 
