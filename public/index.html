@@ -183,6 +183,10 @@
       border-radius: 4px;
       box-sizing: border-box;
     }
+    .batch-summary { display: none; margin-top: 1rem; }
+    .batch-summary.visible { display: block; }
+    #batch-summary-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+    #batch-summary-table th, #batch-summary-table td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid #e5e7eb; }
   </style>
 </head>
 <body>
@@ -190,7 +194,7 @@
   <form id="form">
     <label for="image">Receipt image (Chinese 发票)</label>
     <div class="form-row">
-      <input type="file" id="image" name="image" accept="image/jpeg,image/png,image/webp,image/gif" required>
+      <input type="file" id="image" name="image" accept="image/jpeg,image/png,image/webp,image/gif" multiple required>
       <button type="submit" id="submit">Upload</button>
       <span id="upload-success-msg" class="upload-success-msg" aria-live="polite"></span>
     </div>
@@ -218,10 +222,29 @@
         </table>
         <p class="result-actions">
           <button type="button" id="accept-receipt-btn">Accept</button>
+          <button type="button" id="skip-receipt-btn" style="display: none;">Skip</button>
           <span id="accept-message" class="result-actions-message" role="status"></span>
         </p>
       </div>
     </div>
+  </section>
+  <section id="batch-summary" class="batch-summary" aria-label="New receipts added summary">
+    <h2>New receipts added summary</h2>
+    <table id="batch-summary-table">
+      <thead>
+        <tr>
+          <th scope="col">发票号码</th>
+          <th scope="col">开票日期</th>
+          <th scope="col">名称1</th>
+          <th scope="col">名称2</th>
+          <th scope="col">项目名称</th>
+          <th scope="col">金额</th>
+          <th scope="col">税额</th>
+          <th scope="col">名字</th>
+        </tr>
+      </thead>
+      <tbody id="batch-summary-table-body"></tbody>
+    </table>
   </section>
   <footer class="footer-meta" aria-hidden="true">
     <span class="build-number" id="build-timestamp"></span>

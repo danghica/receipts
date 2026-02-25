@@ -13,6 +13,13 @@
   const acceptReceiptBtn = document.getElementById('accept-receipt-btn');
   const acceptMessageEl = document.getElementById('accept-message');
   const uploadSuccessMsg = document.getElementById('upload-success-msg');
+  const skipReceiptBtn = document.getElementById('skip-receipt-btn');
+  const batchSummarySection = document.getElementById('batch-summary');
+  const batchSummaryTbody = document.getElementById('batch-summary-table-body');
+
+  let batchQueue = [];
+  let addedReceipts = [];
+  let batchMode = false;
 
   function showMessage(text, isError) {
     messageEl.textContent = text;
@@ -172,19 +179,126 @@
     parsedBody.innerHTML = '';
   }
 
+  function getCurrentFormPayload() {
+    const payload = {};
+    const fieldToKey = {
+      '发票号码': 'invoiceNumber',
+      '开票日期': 'invoiceDate',
+      '名称1': 'name1',
+      '名称2': 'name2',
+      '项目名称': 'projectName',
+      '金额': 'amount',
+      '税额': 'tax',
+      '名字': 'customName'
+    };
+    FIELD_ORDER.forEach(function (label) {
+      const input = resultSection.querySelector('input[data-field="' + label + '"]');
+      const key = fieldToKey[label];
+      if (key && input) payload[key] = input.value != null ? String(input.value).trim() : '';
+    });
+    return payload;
+  }
+
+  function renderBatchSummary() {
+    if (!batchSummaryTbody) return;
+    batchSummaryTbody.innerHTML = '';
+    if (addedReceipts.length === 0) {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.setAttribute('colspan', '8');
+      td.textContent = 'No receipts were added in this batch.';
+      tr.appendChild(td);
+      batchSummaryTbody.appendChild(tr);
+    } else {
+      const colOrder = ['invoiceNumber', 'invoiceDate', 'name1', 'name2', 'projectName', 'amount', 'tax', 'customName'];
+      addedReceipts.forEach(function (row) {
+        const tr = document.createElement('tr');
+        colOrder.forEach(function (key) {
+          const td = document.createElement('td');
+          td.textContent = row[key] != null ? String(row[key]) : '';
+          tr.appendChild(td);
+        });
+        batchSummaryTbody.appendChild(tr);
+      });
+    }
+    hideResult();
+    if (batchSummarySection) batchSummarySection.classList.add('visible');
+  }
+
+  function advanceBatch() {
+    if (batchQueue.length === 0) {
+      hideResult();
+      if (batchSummarySection) batchSummarySection.classList.add('visible');
+      renderBatchSummary();
+      batchMode = false;
+      showSkipButton(false);
+      if (acceptReceiptBtn) acceptReceiptBtn.disabled = false;
+      return;
+    }
+    const nextFile = batchQueue.shift();
+    setLoading(true);
+    if (acceptReceiptBtn) acceptReceiptBtn.disabled = true;
+    if (skipReceiptBtn) skipReceiptBtn.disabled = true;
+    const formData = new FormData();
+    formData.append('image', nextFile);
+    fetch('/receipt', { method: 'POST', body: formData })
+      .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+      .then(function (result) {
+        if (result.ok && result.data && result.data.image) {
+          clearAcceptMessage();
+          showResult(result.data.image, result.data.parsed || {}, false, result.data.bboxes, result.data.parsedCrops);
+          showSkipButton(true);
+        } else {
+          showMessage(result.data && result.data.message ? result.data.message : 'Something went wrong.', true);
+          batchQueue = [];
+          hideResult();
+          if (batchSummarySection) batchSummarySection.classList.add('visible');
+          renderBatchSummary();
+          batchMode = false;
+          showSkipButton(false);
+        }
+      })
+      .catch(function () {
+        showMessage('Network or server error. Please try again.', true);
+        batchQueue = [];
+        hideResult();
+        if (batchSummarySection) batchSummarySection.classList.add('visible');
+        renderBatchSummary();
+        batchMode = false;
+        showSkipButton(false);
+      })
+      .finally(function () {
+        setLoading(false);
+        if (acceptReceiptBtn) acceptReceiptBtn.disabled = false;
+        if (skipReceiptBtn) skipReceiptBtn.disabled = false;
+      });
+  }
+
   function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
   }
 
+  function hideBatchSummary() {
+    if (batchSummarySection) batchSummarySection.classList.remove('visible');
+  }
+
+  function showSkipButton(show) {
+    if (skipReceiptBtn) skipReceiptBtn.style.display = show ? '' : 'none';
+  }
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const file = fileInput.files && fileInput.files[0];
-    if (!file) {
-      showMessage('Please select an image file.', true);
+    const files = fileInput.files && Array.from(fileInput.files).filter(function (f) {
+      return f && f.type && f.type.startsWith('image/');
+    });
+    if (!files || files.length === 0) {
+      showMessage('Please select one or more image files.', true);
       return;
     }
+
+    hideBatchSummary();
 
     setLoading(true);
     messageEl.textContent = '';
@@ -192,26 +306,46 @@
     if (uploadSuccessMsg) uploadSuccessMsg.textContent = '';
     hideResult();
 
-    const formData = new FormData();
-    formData.append('image', file);
-
-    try {
-      const res = await fetch('/receipt', {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await res.json().catch(() => ({}));
-
-      if (res.ok) {
-        if (uploadSuccessMsg) uploadSuccessMsg.textContent = 'Receipt scanned. Review and accept.';
-        if (data.image) showResult(data.image, data.parsed || {}, false, data.bboxes, data.parsedCrops);
-        form.reset();
-        return;
+    if (files.length === 1) {
+      const formData = new FormData();
+      formData.append('image', files[0]);
+      try {
+        const res = await fetch('/receipt', { method: 'POST', body: formData });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          if (uploadSuccessMsg) uploadSuccessMsg.textContent = 'Receipt scanned. Review and accept.';
+          if (data.image) showResult(data.image, data.parsed || {}, false, data.bboxes, data.parsedCrops);
+          form.reset();
+          return;
+        }
+        showMessage(data.message || 'Something went wrong.', true);
+      } catch (err) {
+        showMessage('Network or server error. Please try again.', true);
+      } finally {
+        setLoading(false);
       }
+      return;
+    }
 
-      showMessage(data.message || 'Something went wrong.', true);
+    batchMode = true;
+    addedReceipts = [];
+    batchQueue = files.slice(1);
+    const formData = new FormData();
+    formData.append('image', files[0]);
+    try {
+      const res = await fetch('/receipt', { method: 'POST', body: formData });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        if (uploadSuccessMsg) uploadSuccessMsg.textContent = 'Receipt 1 of ' + files.length + '. Review and accept or skip.';
+        if (data.image) showResult(data.image, data.parsed || {}, false, data.bboxes, data.parsedCrops);
+        showSkipButton(true);
+      } else {
+        showMessage(data.message || 'Something went wrong.', true);
+        batchMode = false;
+      }
     } catch (err) {
       showMessage('Network or server error. Please try again.', true);
+      batchMode = false;
     } finally {
       setLoading(false);
     }
@@ -219,65 +353,55 @@
 
   if (acceptReceiptBtn) {
     acceptReceiptBtn.addEventListener('click', function () {
-      var payload = {};
-      var fieldToKey = {
-        '发票号码': 'invoiceNumber',
-        '开票日期': 'invoiceDate',
-        '名称1': 'name1',
-        '名称2': 'name2',
-        '项目名称': 'projectName',
-        '金额': 'amount',
-        '税额': 'tax',
-        '名字': 'customName'
-      };
-      FIELD_ORDER.forEach(function (label) {
-        var input = resultSection.querySelector('input[data-field="' + label + '"]');
-        var key = fieldToKey[label];
-        if (key && input) payload[key] = input.value != null ? String(input.value).trim() : '';
-      });
+      var payload = getCurrentFormPayload();
       acceptReceiptBtn.disabled = true;
       clearAcceptMessage();
       var formData = new FormData();
       Object.keys(payload).forEach(function (k) { formData.append(k, payload[k] || ''); });
       var imgSrc = receiptImage && receiptImage.src;
-      if (imgSrc && imgSrc.indexOf('data:') === 0) {
-        fetch(imgSrc).then(function (r) { return r.blob(); }).then(function (blob) {
-          formData.append('image', blob, (payload.invoiceNumber || 'receipt') + '.png');
-          return fetch('/api/accept-receipt', { method: 'POST', body: formData });
-        }).then(function (r) { return r.json().then(function (data) { return { ok: r.ok, status: r.status, data: data }; }); }).then(function (result) {
-          if (result.ok && result.data.success) {
+      var doAccept = function () {
+        return fetch('/api/accept-receipt', { method: 'POST', body: formData });
+      };
+      var buildFormDataWithImage = function (blob) {
+        formData.append('image', blob, (payload.invoiceNumber || 'receipt') + '.png');
+        return doAccept();
+      };
+      var p = (imgSrc && imgSrc.indexOf('data:') === 0)
+        ? fetch(imgSrc).then(function (r) { return r.blob(); }).then(buildFormDataWithImage)
+        : doAccept();
+      p.then(function (r) { return r.json().then(function (data) { return { ok: r.ok, status: r.status, data: data }; }); })
+        .then(function (result) {
+          if (result.ok && result.data && result.data.success) {
             showAcceptMessage('Receipt added. 发票号码: ' + (result.data.invoiceNumber || ''), false);
             resultHeading.textContent = 'Receipt added';
-          } else if (result.status === 409) {
-            showAcceptMessage(result.data.message || '发票号码 already exists in spreadsheet.', true);
-          } else {
-            showAcceptMessage(result.data.message || 'Failed to add receipt.', true);
-          }
-        }).catch(function () {
-          showAcceptMessage('Network or server error. Please try again.', true);
-        }).finally(function () {
-          acceptReceiptBtn.disabled = false;
-        });
-      } else {
-        fetch('/api/accept-receipt', { method: 'POST', body: formData })
-          .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, status: r.status, data: data }; }); })
-          .then(function (result) {
-            if (result.ok && result.data.success) {
-              showAcceptMessage('Receipt added. 发票号码: ' + (result.data.invoiceNumber || ''), false);
-              resultHeading.textContent = 'Receipt added';
-            } else if (result.status === 409) {
-              showAcceptMessage(result.data.message || '发票号码 already exists in spreadsheet.', true);
-            } else {
-              showAcceptMessage(result.data.message || 'Failed to add receipt.', true);
+            if (batchMode) {
+              addedReceipts.push(payload);
+              if (batchQueue.length > 0) {
+                acceptMessageEl.textContent = (acceptMessageEl ? acceptMessageEl.textContent : '') + ' Next receipt…';
+              }
+              advanceBatch();
+              return;
             }
-          })
-          .catch(function () {
-            showAcceptMessage('Network or server error. Please try again.', true);
-          })
-          .finally(function () {
-            acceptReceiptBtn.disabled = false;
-          });
-      }
+          } else if (result.status === 409) {
+            showAcceptMessage(result.data && result.data.message ? result.data.message : '发票号码 already exists in spreadsheet.', true);
+          } else {
+            showAcceptMessage(result.data && result.data.message ? result.data.message : 'Failed to add receipt.', true);
+          }
+        })
+        .catch(function () {
+          showAcceptMessage('Network or server error. Please try again.', true);
+        })
+        .finally(function () {
+          if (!batchMode) acceptReceiptBtn.disabled = false;
+        });
+    });
+  }
+
+  if (skipReceiptBtn) {
+    skipReceiptBtn.addEventListener('click', function () {
+      if (!batchMode) return;
+      skipReceiptBtn.disabled = true;
+      advanceBatch();
     });
   }
 })();
